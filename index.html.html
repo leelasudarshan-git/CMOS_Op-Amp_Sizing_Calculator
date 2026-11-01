@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CMOS Op-Amp Sizing & Schematic Calculator (5T OTA & Two-Stage Miller)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
+    .card-shadow { box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03); }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .accent-gradient { background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); }
+    svg text { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen py-6 px-4 sm:px-6 lg:px-8 custom-scrollbar">
+
+  <div class="max-w-[1500px] mx-auto space-y-6">
+
+    <!-- Header -->
+    <header class="bg-white rounded-2xl p-6 border border-slate-200 card-shadow flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div class="flex items-center gap-3">
+        <span class="p-3 accent-gradient text-white rounded-xl font-extrabold text-xl shadow-md shadow-indigo-200">
+          A<sub>v</sub>
+        </span>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">CMOS Op-Amp Sizing & Schematic Calculator</h1>
+          <p class="mt-1 text-xs sm:text-sm text-slate-600">
+            Real-time transistor synthesis for <strong>5-Transistor OTA</strong> and <strong>Two-Stage Miller Op-Amp</strong> topologies.
+          </p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 bg-slate-100 p-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 justify-center">
+        <span class="px-3 py-1.5 bg-white rounded-lg shadow-sm text-indigo-600 font-bold border border-slate-200">Scale: nm ($W$ & $L$)</span>
+        <span class="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 font-bold">SPICE Biasing Matched</span>
+      </div>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left Column: Inputs -->
+      <div class="lg:col-span-4 space-y-5">
+
+        <!-- Process Technology Node -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 card-shadow space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+              1. Process Technology Node
+            </h2>
+            <span class="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md">Auto V<sub>DD</sub></span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 uppercase mb-1" for="processNode">Process Node</label>
+              <select id="processNode" onchange="handleProcessChange()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 p-2.5 font-bold">
+                <option value="180">180 nm Node (1.8V)</option>
+                <option value="90">90 nm Node (1.2V)</option>
+                <option value="45" selected>45 nm Node (1.1V)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Supply (V<sub>DD</sub>)</label>
+              <input type="text" id="vddDisplay" value="1.1 V" readonly class="w-full bg-slate-100 border border-slate-200 text-slate-500 text-xs rounded-xl p-2.5 font-semibold cursor-not-allowed" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Target Performance Specs -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 card-shadow space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+              2. Target Circuit Specs
+            </h2>
+            <span class="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md">Top-Level</span>
+          </div>
+
+          <div class="space-y-3.5">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 uppercase mb-1" for="topology">Op-Amp Topology</label>
+              <select id="topology" onchange="handleTopologyChange()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 p-2.5 font-bold text-indigo-700">
+                <option value="5T" selected>5-Transistor Single-Stage OTA (M1-M5)</option>
+                <option value="TwoStage">Two-Stage Miller Op-Amp (M1-M8 + Rz/Cc)</option>
+              </select>
+            </div>
+
+            <!-- Target Gain Slider -->
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <label class="block text-[11px] font-semibold text-slate-600 uppercase" for="targetGain">Target DC Gain A<sub>V</sub> (dB)</label>
+                <span id="gainRangeLabel" class="text-xs font-bold text-indigo-600">Range: 15–28 dB</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <input type="range" id="targetGainSlider" min="15" max="28" step="1" value="20" oninput="syncGainFromSlider()" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                <input type="number" id="targetGain" value="20" min="10" max="100" step="1" oninput="syncGainFromInput()" class="w-16 bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 p-2 font-bold text-center" />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="gbw">GBW (MHz)</label>
+                <input type="number" id="gbw" value="100" min="1" step="5" oninput="calculateSizing()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 p-2 font-medium" />
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="cload">Load Cap C<sub>L</sub> (pF)</label>
+                <input type="number" id="cload" value="1.0" min="0.05" step="0.1" oninput="calculateSizing()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 p-2 font-medium" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1" for="slewRate">Slew Rate SR (V/μs)</label>
+              <input type="number" id="slewRate" value="50" min="1" step="5" oninput="calculateSizing()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 p-2 font-medium" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Length & Efficiency Controls -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 card-shadow space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+              3. Channel Length & Biasing Mode
+            </h2>
+            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+              <button id="btnModeAuto" onclick="setLengthMode('auto')" class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white text-indigo-700 shadow-sm border border-slate-200">Auto L</button>
+              <button id="btnModeManual" onclick="setLengthMode('manual')" class="px-2 py-0.5 text-[10px] font-semibold rounded-md text-slate-600 hover:text-slate-900">Custom L</button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <label class="block text-[11px] font-semibold text-slate-600" for="channelLengthInput">Channel Length L (nm)</label>
+                <span id="lModeStatusBadge" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">Gain Driven</span>
+              </div>
+              <input type="number" id="channelLengthInput" min="45" max="5000" step="5" oninput="handleManualLengthInput()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl p-2 font-bold" />
+            </div>
+
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <label class="block text-[11px] font-semibold text-slate-600" for="gmid">g<sub>m</sub>/I<sub>D</sub> Efficiency (V<sup>-1</sup>)</label>
+                <span id="gmidRegionBadge" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Moderate Inv</span>
+              </div>
+              <input type="range" id="gmidSlider" min="4" max="22" step="0.5" value="12" oninput="syncGMIDFromSlider()" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600 mb-1" />
+              <input type="number" id="gmid" value="12" min="4" max="22" step="0.5" oninput="syncGMIDFromInput()" class="w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl p-1.5 font-semibold text-center" />
+            </div>
+          </div>
+        </div>
+
+        <button onclick="calculateSizing()" class="w-full py-3 px-4 accent-gradient text-white font-bold text-xs uppercase tracking-wider rounded-xl card-shadow transition hover:opacity-95">
+          Re-Synthesize Circuit Matrix
+        </button>
+
+      </div>
+
+      <!-- Right Column: Results & Schematics -->
+      <div class="lg:col-span-8 space-y-5">
+
+        <!-- Executive Performance Summary -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 card-shadow">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+            <h2 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              Extracted Performance & Gain Match
+            </h2>
+            <span id="topologyBadge" class="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200">5-Transistor Single-Stage OTA</span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <span class="block text-[10px] font-medium text-slate-500 uppercase">Target DC Gain</span>
+              <span class="block text-base font-extrabold text-slate-700 mt-0.5" id="resTargetGain">20.0 dB</span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <span class="block text-[10px] font-medium text-slate-500 uppercase">Achieved DC Gain</span>
+              <span class="block text-base font-extrabold text-emerald-600 mt-0.5" id="resAchievedGain">20.1 dB</span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <span class="block text-[10px] font-medium text-slate-500 uppercase">Required Length (L)</span>
+              <span class="block text-base font-extrabold text-indigo-600 mt-0.5" id="resReqL">200 nm</span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <span class="block text-[10px] font-medium text-slate-500 uppercase">Total Power (P<sub>DC</sub>)</span>
+              <span class="block text-base font-extrabold text-slate-900 mt-0.5" id="resPower">115.2 μW</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- SPICE Bias Voltages Panel -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 card-shadow">
+          <h2 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-2 mb-3 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            Calculated SPICE Bias Voltages
+          </h2>
+          <div id="biasVoltageGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Main Display: Matrix & Schematic Side-by-Side -->
+        <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+
+          <!-- Device Sizing Table -->
+          <div class="xl:col-span-7 bg-white rounded-2xl p-5 border border-slate-200 card-shadow">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+              <h2 class="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                Device Sizing Matrix (nm Scale)
+              </h2>
+              <span id="transistorCountBadge" class="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100">5 Transistors</span>
+            </div>
+
+            <div class="overflow-x-auto custom-scrollbar">
+              <table class="w-full text-left text-[11px] border-collapse">
+                <thead>
+                  <tr class="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+                    <th class="p-2">Device</th>
+                    <th class="p-2">Type</th>
+                    <th class="p-2">I<sub>D</sub> (μA)</th>
+                    <th class="p-2 text-indigo-700 font-bold">L (nm)</th>
+                    <th class="p-2 text-indigo-700 font-bold">W (nm)</th>
+                    <th class="p-2">W/L</th>
+                  </tr>
+                </thead>
+                <tbody id="resultsTableBody" class="divide-y divide-slate-100 text-slate-700 font-medium">
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Circuit Schematic Diagram -->
+          <div class="xl:col-span-5 bg-white rounded-2xl p-5 border border-slate-200 card-shadow flex flex-col items-center justify-center min-h-[380px]">
+            <h3 class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3" id="schematicTitle">
+              5-Transistor Single-Stage OTA Schematic
+            </h3>
+            <div id="svgContainer" class="w-full flex justify-center items-center">
+              <!-- Rendered SVG -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center text-xs text-slate-400 py-4 border-t border-slate-200">
+      CMOS Op-Amp Architecture, Sizing & Biasing Suite • All Dimensions Specified in Nanometers (nm)
+    </footer>
+
+  </div>
+
+  <script>
+    const PROCESS_NODES = {
+      '180': { vdd: 1.8, lmin: 180, baseGain5T: 14.0, baseGain2Stage: 42.0, jSqN: 1.2, jSqP: 0.7, vtN: 0.45, vtP: 0.45 },
+      '90':  { vdd: 1.2, lmin: 90,  baseGain5T: 10.0, baseGain2Stage: 36.0, jSqN: 1.8, jSqP: 1.1, vtN: 0.38, vtP: 0.38 },
+      '45':  { vdd: 1.1, lmin: 45,  baseGain5T: 7.0,  baseGain2Stage: 30.0, jSqN: 2.5, jSqP: 1.5, vtN: 0.35, vtP: 0.35 }
+    };
+
+    const TOPOLOGY_CONFIGS = {
+      '5T': {
+        name: '5-Transistor Single-Stage OTA',
+        transistorCount: 5,
+        minGain: 15, maxGain: 28, defaultGain: 20,
+        cascodeStages: 1
+      },
+      'TwoStage': {
+        name: 'Two-Stage Miller Op-Amp',
+        transistorCount: 8,
+        minGain: 45, maxGain: 75, defaultGain: 60,
+        cascodeStages: 2
+      }
+    };
+
+    let currentLengthMode = 'auto';
+
+    function handleProcessChange() {
+      const nodeKey = document.getElementById('processNode').value;
+      const config = PROCESS_NODES[nodeKey];
+      document.getElementById('vddDisplay').value = `${config.vdd} V`;
+      calculateSizing();
+    }
+
+    function handleTopologyChange() {
+      const topoKey = document.getElementById('topology').value;
+      const config = TOPOLOGY_CONFIGS[topoKey];
+
+      const gainSlider = document.getElementById('targetGainSlider');
+      const gainInput = document.getElementById('targetGain');
+      const gainRangeLabel = document.getElementById('gainRangeLabel');
+
+      gainSlider.min = config.minGain;
+      gainSlider.max = config.maxGain;
+      gainSlider.value = config.defaultGain;
+      gainInput.value = config.defaultGain;
+
+      gainRangeLabel.innerText = `Range: ${config.minGain}–${config.maxGain} dB`;
+      document.getElementById('topologyBadge').innerText = config.name;
+      document.getElementById('transistorCountBadge').innerText = `${config.transistorCount} Transistors`;
+
+      calculateSizing();
+    }
+
+    function syncGainFromSlider() {
+      document.getElementById('targetGain').value = document.getElementById('targetGainSlider').value;
+      calculateSizing();
+    }
+
+    function syncGainFromInput() {
+      document.getElementById('targetGainSlider').value = document.getElementById('targetGain').value;
+      calculateSizing();
+    }
+
+    function setLengthMode(mode) {
+      currentLengthMode = mode;
+      const btnAuto = document.getElementById('btnModeAuto');
+      const btnManual = document.getElementById('btnModeManual');
+      const lInput = document.getElementById('channelLengthInput');
+      const lBadge = document.getElementById('lModeStatusBadge');
+
+      if (mode === 'auto') {
+        btnAuto.className = "px-2 py-0.5 text-[10px] font-bold rounded-md bg-white text-indigo-700 shadow-sm border border-slate-200";
+        btnManual.className = "px-2 py-0.5 text-[10px] font-semibold rounded-md text-slate-600 hover:text-slate-900";
+        lInput.readOnly = true;
+        lInput.className = "w-full bg-slate-100 border border-slate-200 text-indigo-700 text-xs rounded-xl p-2 font-bold cursor-not-allowed";
+        lBadge.innerText = "Gain Driven";
+      } else {
+        btnManual.className = "px-2 py-0.5 text-[10px] font-bold rounded-md bg-white text-indigo-700 shadow-sm border border-slate-200";
+        btnAuto.className = "px-2 py-0.5 text-[10px] font-semibold rounded-md text-slate-600 hover:text-slate-900";
+        lInput.readOnly = false;
+        lInput.className = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl focus:ring-2 focus:ring-indigo-500 p-2 font-bold";
+        lBadge.innerText = "Custom L";
+      }
+      calculateSizing();
+    }
+
+    function handleManualLengthInput() {
+      if (currentLengthMode === 'manual') calculateSizing();
+    }
+
+    function syncGMIDFromSlider() {
+      const val = document.getElementById('gmidSlider').value;
+      document.getElementById('gmid').value = val;
+      updateGMIDBadge(parseFloat(val));
+      calculateSizing();
+    }
+
+    function syncGMIDFromInput() {
+      let val = parseFloat(document.getElementById('gmid').value) || 12;
+      document.getElementById('gmidSlider').value = val;
+      updateGMIDBadge(val);
+      calculateSizing();
+    }
+
+    function updateGMIDBadge(val) {
+      const badge = document.getElementById('gmidRegionBadge');
+      if (val < 9) {
+        badge.innerText = 'Strong Inv';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200';
+      } else if (val <= 15) {
+        badge.innerText = 'Moderate Inv';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200';
+      } else {
+        badge.innerText = 'Weak Inv';
+        badge.className = 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200';
+      }
+    }
+
+    function calculateSizing() {
+      const nodeKey = document.getElementById('processNode').value;
+      const proc = PROCESS_NODES[nodeKey];
+      const topoKey = document.getElementById('topology').value;
+      const topo = TOPOLOGY_CONFIGS[topoKey];
+
+      const targetGain_dB = parseFloat(document.getElementById('targetGain').value) || topo.defaultGain;
+      const gbwMHz = parseFloat(document.getElementById('gbw').value) || 100;
+      const cloadpF = parseFloat(document.getElementById('cload').value) || 1.0;
+      const slewRate = parseFloat(document.getElementById('slewRate').value) || 50;
+      const gmidVal = parseFloat(document.getElementById('gmid').value) || 12;
+
+      const GBW = gbwMHz * 1e6;
+      const CL = cloadpF * 1e-12;
+      const SR = slewRate * 1e6;
+
+      let baseGain_dB = (topoKey === '5T') ? proc.baseGain5T : proc.baseGain2Stage;
+
+      const exponent = (targetGain_dB - baseGain_dB) / (20.0 * topo.cascodeStages);
+      let L_req = proc.lmin * Math.pow(10, exponent);
+      const L_req_clamped = Math.max(proc.lmin, Math.min(30 * proc.lmin, Math.round(L_req / 5) * 5));
+
+      let L_used = proc.lmin;
+      if (currentLengthMode === 'auto') {
+        L_used = L_req_clamped;
+        document.getElementById('channelLengthInput').value = Math.round(L_used);
+      } else {
+        L_used = Math.max(proc.lmin, parseFloat(document.getElementById('channelLengthInput').value) || proc.lmin);
+      }
+
+      const lRatio = L_used / proc.lmin;
+      let achievedGain_dB = baseGain_dB + (20.0 * topo.cascodeStages * Math.log10(lRatio));
+
+      let Cc_pF = 0;
+      let gm1 = 2 * Math.PI * GBW * CL;
+
+      if (topoKey === 'TwoStage') {
+        Cc_pF = 0.3 * cloadpF;
+        gm1 = 2 * Math.PI * GBW * (Cc_pF * 1e-12);
+      }
+
+      const C_slew = (topoKey === 'TwoStage') ? (Cc_pF * 1e-12) : CL;
+      const Iss_SR = SR * C_slew;
+
+      let Id1 = gm1 / gmidVal;
+      let Iss1 = 2 * Id1;
+
+      if (Iss1 < Iss_SR) {
+        Iss1 = Iss_SR;
+        Id1 = Iss1 / 2;
+        gm1 = Id1 * gmidVal;
+      }
+
+      const invFactor = 1.0 + (gmidVal - 12.0) * 0.05;
+      const jSqN = proc.jSqN / invFactor;
+      const jSqP = proc.jSqP / invFactor;
+
+      let totalCurrent_uA = 0;
+      let tableRowsHTML = '';
+      const Id1_uA = Id1 * 1e6;
+      const Iss1_uA = Iss1 * 1e6;
+
+      if (topoKey === '5T') {
+        totalCurrent_uA = Iss1_uA;
+        const aspect1 = Id1_uA / jSqN;
+        const aspect3 = Id1_uA / jSqP;
+        const aspect5 = Iss1_uA / jSqN;
+
+        tableRowsHTML = `
+          ${renderRow('M1, M2', 'NMOS', Id1_uA, L_used, aspect1 * L_used, aspect1)}
+          ${renderRow('M3, M4', 'PMOS', Id1_uA, L_used, aspect3 * L_used, aspect3)}
+          ${renderRow('M5', 'NMOS', Iss1_uA, L_used, aspect5 * L_used, aspect5)}
+        `;
+      } else if (topoKey === 'TwoStage') {
+        const gm6_req = 2.2 * gm1 * (CL / (Cc_pF * 1e-12));
+        const Id2_uA = (gm6_req / gmidVal) * 1e6;
+        totalCurrent_uA = Iss1_uA + Id2_uA + 10;
+
+        const aspect1 = Id1_uA / jSqN;
+        const aspect3 = Id1_uA / jSqP;
+        const aspect5 = Iss1_uA / jSqN;
+        const aspect6 = Id2_uA / jSqP;
+        const aspect7 = Id2_uA / jSqN;
+        const aspect8 = 10 / jSqN;
+
+        tableRowsHTML = `
+          ${renderRow('M1, M2', 'NMOS', Id1_uA, L_used, aspect1 * L_used, aspect1)}
+          ${renderRow('M3, M4', 'PMOS', Id1_uA, L_used, aspect3 * L_used, aspect3)}
+          ${renderRow('M5', 'NMOS', Iss1_uA, L_used, aspect5 * L_used, aspect5)}
+          ${renderRow('M6', 'PMOS', Id2_uA, L_used, aspect6 * L_used, aspect6)}
+          ${renderRow('M7', 'NMOS', Id2_uA, L_used, aspect7 * L_used, aspect7)}
+          ${renderRow('M8', 'NMOS', 10.0, L_used, aspect8 * L_used, aspect8)}
+        `;
+      }
+
+      document.getElementById('resTargetGain').innerText = `${targetGain_dB.toFixed(1)} dB`;
+      document.getElementById('resAchievedGain').innerText = `${achievedGain_dB.toFixed(1)} dB`;
+      document.getElementById('resReqL').innerText = `${Math.round(L_used)} nm`;
+      document.getElementById('resPower').innerText = `${(totalCurrent_uA * proc.vdd).toFixed(1)} μW`;
+      document.getElementById('resultsTableBody').innerHTML = tableRowsHTML;
+
+      updateBiasVoltagesAndSVG(topoKey, proc, gmidVal, Cc_pF, gm1);
+    }
+
+    function renderRow(device, type, Id_uA, L_nm, W_nm, aspect) {
+      const badgeClass = type === 'NMOS' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200';
+      return `
+        <tr class="hover:bg-slate-50">
+          <td class="p-2 font-bold text-slate-900">${device}</td>
+          <td class="p-2"><span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${badgeClass}">${type}</span></td>
+          <td class="p-2 text-slate-900 font-semibold">${Id_uA.toFixed(1)}</td>
+          <td class="p-2 font-bold text-indigo-700">${Math.round(L_nm)} nm</td>
+          <td class="p-2 font-extrabold text-indigo-600">${Math.round(W_nm).toLocaleString()} nm</td>
+          <td class="p-2 font-mono text-slate-800 font-bold">${aspect.toFixed(1)}</td>
+        </tr>
+      `;
+    }
+
+    function updateBiasVoltagesAndSVG(topoKey, proc, gmidVal, Cc_pF, gm1) {
+      const vov = 2.0 / gmidVal;
+      const vtN = proc.vtN;
+      const vdd = proc.vdd;
+
+      const biasGrid = document.getElementById('biasVoltageGrid');
+      const title = document.getElementById('schematicTitle');
+      const svgContainer = document.getElementById('svgContainer');
+
+      if (topoKey === '5T') {
+        const vb = (vtN + vov).toFixed(2);
+        const vicm = (vtN + 2 * vov + 0.1).toFixed(2);
+        biasGrid.innerHTML = `
+          ${renderBiasCard('V<sub>icm</sub> (Input Common)', `${vicm} V`, 'Common Mode Input')}
+          ${renderBiasCard('V<sub>b</sub> (Tail Bias M5)', `${vb} V`, 'Sets Tail Current')}
+          ${renderBiasCard('V<sub>DD</sub> Supply', `${vdd} V`, 'Main Power Rail')}
+          ${renderBiasCard('V<sub>out,DC</sub> Level', `${(vdd/2).toFixed(2)} V`, 'Mid-Rail Output')}
+        `;
+        title.innerText = "5-Transistor Single-Stage OTA Schematic";
+        svgContainer.innerHTML = draw5TTextbookSVG();
+      } else if (topoKey === 'TwoStage') {
+        const Rz = Math.round(1.0 / (gm1 * 2.2));
+        const vtail = (vtN + vov).toFixed(2);
+        biasGrid.innerHTML = `
+          ${renderBiasCard('Miller Cap (C<sub>c</sub>)', `${Cc_pF.toFixed(2)} pF`, 'Phase Margin Comp.')}
+          ${renderBiasCard('Null Resistor (R<sub>z</sub>)', `${Rz} Ω`, 'Zero-Nulling Resistor')}
+          ${renderBiasCard('V<sub>tail</sub> (Gate M5/M7/M8)', `${vtail} V`, 'NMOS Mirror Bias')}
+          ${renderBiasCard('I<sub>ref</sub> Bias Current', `10.0 μA`, 'Reference Current')}
+        `;
+        title.innerText = "Two-Stage Miller Op-Amp Schematic";
+        svgContainer.innerHTML = drawTwoStageTextbookSVG();
+      }
+    }
+
+    function renderBiasCard(title, val, desc) {
+      return `
+        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <span class="block text-[10px] font-medium text-slate-500 uppercase">${title}</span>
+          <span class="block text-xs font-extrabold text-indigo-700 mt-0.5">${val}</span>
+          <span class="block text-[9px] text-slate-400 mt-0.5">${desc}</span>
+        </div>
+      `;
+    }
+
+    function drawNMOS(x, y, label) {
+      return `
+        <g transform="translate(${x},${y})">
+          <line x1="0" y1="0" x2="0" y2="30" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="5" y1="5" x2="5" y2="25" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="5" y1="15" x2="-12" y2="15" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="0" y1="5" x2="15" y2="5" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="0" y1="25" x2="15" y2="25" stroke="#0f172a" stroke-width="1.8"/>
+          <text x="20" y="20" font-weight="bold" font-size="11" fill="#1e40af">${label}</text>
+        </g>
+      `;
+    }
+
+    function drawPMOS(x, y, label) {
+      return `
+        <g transform="translate(${x},${y})">
+          <line x1="0" y1="0" x2="0" y2="30" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="5" y1="5" x2="5" y2="25" stroke="#0f172a" stroke-width="1.8"/>
+          <circle cx="-3" cy="15" r="3" fill="none" stroke="#0f172a" stroke-width="1.5"/>
+          <line x1="-6" y1="15" x2="-15" y2="15" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="0" y1="5" x2="15" y2="5" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="0" y1="25" x2="15" y2="25" stroke="#0f172a" stroke-width="1.8"/>
+          <text x="20" y="20" font-weight="bold" font-size="11" fill="#3730a3">${label}</text>
+        </g>
+      `;
+    }
+
+    function draw5TTextbookSVG() {
+      return `
+        <svg width="300" height="320" viewBox="0 0 300 320">
+          <line x1="40" y1="20" x2="260" y2="20" stroke="#0f172a" stroke-width="3"/>
+          <text x="150" y="15" font-weight="extrabold" font-size="12" text-anchor="middle" fill="#4f46e5">VDD</text>
+
+          ${drawPMOS(80, 40, 'M3')}
+          ${drawPMOS(200, 40, 'M4')}
+          ${drawNMOS(80, 140, 'M1')}
+          ${drawNMOS(200, 140, 'M2')}
+          ${drawNMOS(140, 230, 'M5')}
+
+          <line x1="95" y1="20" x2="95" y2="40" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="215" y1="20" x2="215" y2="40" stroke="#0f172a" stroke-width="1.8"/>
+
+          <line x1="95" y1="70" x2="95" y2="140" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="215" y1="70" x2="215" y2="140" stroke="#0f172a" stroke-width="1.8"/>
+
+          <line x1="65" y1="55" x2="65" y2="100" stroke="#4f46e5" stroke-width="1.8"/>
+          <line x1="65" y1="100" x2="95" y2="100" stroke="#4f46e5" stroke-width="1.8"/>
+          <line x1="65" y1="55" x2="185" y2="55" stroke="#4f46e5" stroke-width="1.8"/>
+          <circle cx="95" cy="100" r="2.5" fill="#4f46e5"/>
+
+          <line x1="68" y1="155" x2="35" y2="155" stroke="#2563eb" stroke-width="1.8"/>
+          <text x="30" y="159" font-weight="bold" font-size="10" text-anchor="end" fill="#2563eb">Vin1</text>
+
+          <line x1="188" y1="155" x2="265" y2="155" stroke="#2563eb" stroke-width="1.8"/>
+          <text x="270" y="159" font-weight="bold" font-size="10" text-anchor="start" fill="#2563eb">Vin2</text>
+
+          <line x1="215" y1="105" x2="270" y2="105" stroke="#16a34a" stroke-width="2"/>
+          <circle cx="215" cy="105" r="3" fill="#16a34a"/>
+          <text x="275" y="109" font-weight="extrabold" font-size="11" fill="#16a34a">out</text>
+
+          <line x1="95" y1="165" x2="95" y2="200" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="215" y1="165" x2="215" y2="200" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="95" y1="200" x2="215" y2="200" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="155" y1="200" x2="155" y2="230" stroke="#0f172a" stroke-width="1.8"/>
+
+          <line x1="128" y1="245" x2="90" y2="245" stroke="#d97706" stroke-width="1.8"/>
+          <text x="85" y="249" font-weight="bold" font-size="10" text-anchor="end" fill="#d97706">Vb</text>
+
+          <line x1="155" y1="260" x2="155" y2="290" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="135" y1="290" x2="175" y2="290" stroke="#0f172a" stroke-width="2.5"/>
+          <line x1="145" y1="294" x2="165" y2="294" stroke="#0f172a" stroke-width="1.8"/>
+        </svg>
+      `;
+    }
+
+    function drawTwoStageTextbookSVG() {
+      return `
+        <svg width="320" height="320" viewBox="0 0 320 320">
+          <line x1="20" y1="20" x2="300" y2="20" stroke="#0f172a" stroke-width="3"/>
+          <text x="160" y="15" font-weight="extrabold" font-size="12" text-anchor="middle" fill="#4f46e5">VDD</text>
+
+          <circle cx="45" cy="70" r="10" fill="none" stroke="#2563eb" stroke-width="1.8"/>
+          <path d="M 45 64 L 45 76 M 45 76 L 42 72 M 45 76 L 48 72" stroke="#2563eb" stroke-width="1.5"/>
+          <text x="30" y="74" font-weight="bold" font-size="9" fill="#2563eb">Iref</text>
+          <line x1="45" y1="20" x2="45" y2="60" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="45" y1="80" x2="45" y2="185" stroke="#0f172a" stroke-width="1.8"/>
+          ${drawNMOS(45, 185, 'M8')}
+
+          ${drawPMOS(110, 40, 'M3')}
+          ${drawPMOS(175, 40, 'M4')}
+          <line x1="125" y1="20" x2="125" y2="40" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="190" y1="20" x2="190" y2="40" stroke="#0f172a" stroke-width="1.8"/>
+
+          <line x1="95" y1="55" x2="95" y2="90" stroke="#4f46e5" stroke-width="1.8"/>
+          <line x1="95" y1="90" x2="125" y2="90" stroke="#4f46e5" stroke-width="1.8"/>
+          <line x1="95" y1="55" x2="160" y2="55" stroke="#4f46e5" stroke-width="1.8"/>
+
+          ${drawNMOS(110, 115, 'M1')}
+          ${drawNMOS(175, 115, 'M2')}
+          <line x1="125" y1="70" x2="125" y2="115" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="190" y1="70" x2="190" y2="115" stroke="#0f172a" stroke-width="1.8"/>
+
+          <line x1="98" y1="130" x2="80" y2="130" stroke="#2563eb" stroke-width="1.8"/>
+          <text x="75" y="134" font-weight="bold" font-size="9" text-anchor="end" fill="#2563eb">Vin_n</text>
+          <line x1="163" y1="130" x2="145" y2="130" stroke="#2563eb" stroke-width="1.8"/>
+          <text x="140" y="134" font-weight="bold" font-size="9" text-anchor="end" fill="#2563eb">Vin_p</text>
+
+          ${drawNMOS(142, 185, 'M5')}
+          <line x1="125" y1="145" x2="125" y2="170" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="190" y1="145" x2="190" y2="170" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="125" y1="170" x2="190" y2="170" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="157" y1="170" x2="157" y2="185" stroke="#0f172a" stroke-width="1.8"/>
+
+          ${drawPMOS(250, 40, 'M6')}
+          ${drawNMOS(250, 185, 'M7')}
+          <line x1="265" y1="20" x2="265" y2="40" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="265" y1="70" x2="265" y2="185" stroke="#0f172a" stroke-width="1.8"/>
+
+          <line x1="190" y1="95" x2="235" y2="95" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="235" y1="95" x2="235" y2="55" stroke="#0f172a" stroke-width="1.8"/>
+
+          <circle cx="190" cy="95" r="2.5" fill="#0f172a"/>
+          <line x1="190" y1="110" x2="210" y2="110" stroke="#d97706" stroke-width="1.5"/>
+          <rect x="210" y="105" width="16" height="10" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+          <text x="218" y="113" font-weight="bold" font-size="7" text-anchor="middle" fill="#b45309">Rz</text>
+          <line x1="226" y1="110" x2="236" y2="110" stroke="#d97706" stroke-width="1.5"/>
+          <line x1="236" y1="104" x2="236" y2="116" stroke="#d97706" stroke-width="1.8"/>
+          <line x1="240" y1="104" x2="240" y2="116" stroke="#d97706" stroke-width="1.8"/>
+          <text x="238" y="99" font-weight="bold" font-size="7" text-anchor="middle" fill="#b45309">Cc</text>
+          <line x1="240" y1="110" x2="265" y2="110" stroke="#d97706" stroke-width="1.5"/>
+
+          <line x1="265" y1="130" x2="300" y2="130" stroke="#16a34a" stroke-width="2"/>
+          <circle cx="265" cy="130" r="3" fill="#16a34a"/>
+          <text x="303" y="134" font-weight="extrabold" font-size="10" fill="#16a34a">Vout</text>
+
+          <line x1="33" y1="200" x2="235" y2="200" stroke="#d97706" stroke-width="1.8"/>
+          <line x1="33" y1="200" x2="33" y2="160" stroke="#d97706" stroke-width="1.8"/>
+          <line x1="33" y1="160" x2="45" y2="160" stroke="#d97706" stroke-width="1.8"/>
+
+          <line x1="20" y1="280" x2="300" y2="280" stroke="#0f172a" stroke-width="3"/>
+          <text x="160" y="295" font-weight="extrabold" font-size="11" text-anchor="middle">VSS (GND)</text>
+          <line x1="60" y1="215" x2="60" y2="280" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="157" y1="215" x2="157" y2="280" stroke="#0f172a" stroke-width="1.8"/>
+          <line x1="265" y1="215" x2="265" y2="280" stroke="#0f172a" stroke-width="1.8"/>
+        </svg>
+      `;
+    }
+
+    window.onload = function() {
+      handleProcessChange();
+      handleTopologyChange();
+      setLengthMode('auto');
+    };
+  </script>
+</body>
+</html>
